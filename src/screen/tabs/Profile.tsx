@@ -83,6 +83,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     fontFamily: 'Poppins-ExtraBold',
+    color:'black',
+    textAlign:'center',
   },
   label: {
     fontFamily: 'Poppins-Bold',

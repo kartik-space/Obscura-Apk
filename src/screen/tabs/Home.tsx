@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import OrderCard from '../../components/cards/OrderCard';
 import FilterTabs from '../../components/filterTabs/FilterTabs';
 import useDriverBookings from '../../hooks/useDriverBookings';
@@ -30,6 +38,8 @@ interface Order {
     name: string;
     phoneNo: string;
   };
+  type:string
+  desc:string;
 }
 
 const Home: React.FC = () => {
@@ -40,9 +50,22 @@ const Home: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const { updateStatus, isLoading: isStatusUpdating, error: statusError } = useUpdateDriverStatus(driverId);
-  const { data: orders, isLoading: isOrdersLoading, error: ordersError, refetch } = useDriverBookings(driverId);
-  const { data: driverProfile, isLoading: isProfileLoading, error: profileError } = useDriverProfile(driverId || '');
+  const {
+    updateStatus,
+    isLoading: isStatusUpdating,
+    error: statusError,
+  } = useUpdateDriverStatus(driverId);
+  const {
+    data: orders,
+    isLoading: isOrdersLoading,
+    error: ordersError,
+    refetch,
+  } = useDriverBookings(driverId);
+  const {
+    data: driverProfile,
+    isLoading: isProfileLoading,
+    error: profileError,
+  } = useDriverProfile(driverId || '');
 
   useEffect(() => {
     const fetchDriverId = async () => {
@@ -74,10 +97,16 @@ const Home: React.FC = () => {
     try {
       const updatedOrders = await Promise.all(
         orders.map(async order => {
-          const startAddress = await getAddressFromCoordinates(order.start.latitude, order.start.longitude);
-          const endAddress = await getAddressFromCoordinates(order.end.latitude, order.end.longitude);
-          return { ...order, startAddress, endAddress };
-        })
+          const startAddress = await getAddressFromCoordinates(
+            order.start.latitude,
+            order.start.longitude,
+          );
+          const endAddress = await getAddressFromCoordinates(
+            order.end.latitude,
+            order.end.longitude,
+          );
+          return {...order, startAddress, endAddress};
+        }),
       );
       setOriginalOrders(updatedOrders);
       setFilteredOrders(updatedOrders);
@@ -97,9 +126,6 @@ const Home: React.FC = () => {
           const orderDate = new Date(order.date);
           return orderDate.toDateString() === today.toDateString();
         });
-        break;
-      case 'Requested':
-        filtered = originalOrders.filter(order => order.status === 'REQUESTED');
         break;
       case 'Upcoming':
         filtered = originalOrders.filter(order => {
@@ -157,10 +183,11 @@ const Home: React.FC = () => {
           colors={['#0000ff']}
           tintColor="#0000ff"
         />
-      }
-    >
+      }>
       <View style={styles.welcomeContainer}>
-        <Text style={styles.welcomeText}>Welcome {driverProfile?.name || 'Driver'}</Text>
+        <Text style={styles.welcomeText}>
+          Welcome {driverProfile?.name || 'Driver'}
+        </Text>
       </View>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -170,8 +197,8 @@ const Home: React.FC = () => {
               {isActive ? 'Active' : 'Inactive'}
             </Text>
             <Switch
-              trackColor={{ false: '#FF6347', true: '#32CD32' }}
-              thumbColor='#FFFFFF'
+              trackColor={{false: '#FF6347', true: '#32CD32'}}
+              thumbColor="#FFFFFF"
               ios_backgroundColor="#E0E0E0"
               onValueChange={toggleSwitch}
               value={isActive}
@@ -181,11 +208,10 @@ const Home: React.FC = () => {
         </View>
         <FilterTabs
           filters={[
-            { label: 'All' },
-            { label: 'Today' },
-            { label: 'Requested' },
-            { label: 'Upcoming' },
-            { label: 'Previous' },
+            {label: 'All'},
+            {label: 'Today'},
+            {label: 'Upcoming'},
+            {label: 'Previous'},
           ]}
           selectedFilter={selectedFilter}
           onSelectFilter={setSelectedFilter}
@@ -193,6 +219,8 @@ const Home: React.FC = () => {
         <View style={styles.ordersContainer}>
           {ordersError ? (
             <Text>Error: {ordersError.message}</Text>
+          ) : isOrdersLoading ? (
+            <ActivityIndicator size="large" color="#000" />
           ) : filteredOrders.length > 0 ? (
             filteredOrders.map((order: Order) => (
               <View key={order._id}>
@@ -203,6 +231,8 @@ const Home: React.FC = () => {
                   time={order.time}
                   userName={order.user.name}
                   phoneNo={order.user.phoneNo}
+                  type={order.type}
+                  desc={order.desc}
                 />
               </View>
             ))
@@ -222,7 +252,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   welcomeContainer: {
-
     height: 100,
     backgroundColor: '#000',
     borderBottomRightRadius: 25,
@@ -230,7 +259,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 5,
@@ -254,7 +283,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,

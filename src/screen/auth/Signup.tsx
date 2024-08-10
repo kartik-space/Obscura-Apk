@@ -52,7 +52,11 @@ const Signup = ({ navigation }: any) => {
     if (step === 3) {
       try {
         await registerDriver(formData);
-        navigation.navigate('login');
+        setSnackbarMessage('Registration successful!');
+        setSnackbarVisible(true);
+        setTimeout(() => {
+          navigation.navigate('login');
+        }, 2000); // Delay navigation to allow snackbar message to be seen
       } catch (error) {
         console.error('Failed to register driver:', error);
         setSnackbarMessage('Failed to register driver. Please try again.');
@@ -62,6 +66,7 @@ const Signup = ({ navigation }: any) => {
       setStep(step + 1);
     }
   };
+  
 
   const handlePrevious = () => {
     setStep(step - 1);
@@ -79,7 +84,7 @@ const Signup = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollView}
         enableOnAndroid={true}
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={120}
+        extraScrollHeight={0}
       >
         <View style={styles.imageContainer}>
           <Image

@@ -31,9 +31,14 @@ const Login = ({navigation}: any) => {
       });
       return;
     }
-
+  
     try {
       await login({ phone: phoneNo, password });
+      Snackbar.show({
+        text: 'Login successful!',
+        duration: Snackbar.LENGTH_SHORT,
+        backgroundColor: 'green',
+      });
       navigation.replace('HomeTabs');
     } catch (err: any) {
       Snackbar.show({
@@ -43,6 +48,7 @@ const Login = ({navigation}: any) => {
       });
     }
   };
+  
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -50,14 +56,14 @@ const Login = ({navigation}: any) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={{ margin: 20 }}>
+          {/* <View style={{ margin: 20 }}>
             <TouchableOpacity onPress={() => navigation.navigate('signup')}>
               <Image
                 style={{ width: 25, height: 25 }}
                 source={require('../../assets/images/back-arrow-50.png')}
               />
             </TouchableOpacity>
-          </View>
+          </View> */}
           <View style={{ flex: 1, justifyContent: 'center', alignContent: 'center' }}>
             <View style={{ margin: 10 }}>
               <Image
