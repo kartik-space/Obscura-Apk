@@ -1,325 +1,431 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {useState, useEffect, useRef} from 'react';
+import axios from 'axios';
 import {
-  ActivityIndicator,
-  RefreshControl,
   ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
   View,
+  Text,
+  TouchableOpacity,
+  RefreshControl,
+  Alert,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  Platform,
+  Modal,
 } from 'react-native';
-import OrderCard from '../../components/cards/OrderCard';
-import FilterTabs from '../../components/filterTabs/FilterTabs';
-import useDriverBookings from '../../hooks/useDriverBookings';
-import { useDriverProfile } from '../../hooks/useDriverProfile'; // Import your custom hook
-import useUpdateDriverStatus from '../../hooks/useUpdateDriverStatus';
-import { getAddressFromCoordinates } from '../../utils/geocoding'; // Import your geocoding utility
-
-interface Order {
-  _id: string;
-  start: {
-    latitude: number;
-    longitude: number;
-  };
-  end: {
-    latitude: number;
-    longitude: number;
-  };
-  startAddress: string;
-  endAddress: string;
-  date: string;
-  time: string;
-  driver: {
-    name: string;
-  } | null;
-  status: string;
-  user: {
-    name: string;
-    phoneNo: string;
-  };
-  type:string
-  desc:string;
-}
+import {Camera, useCameraDevice} from 'react-native-vision-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Tts from 'react-native-tts';
+import {translations} from './localization'; // Adjust the import path
 
 const Home: React.FC = () => {
-  const [isActive, setIsActive] = useState(false);
-  const [driverId, setDriverId] = useState<string | null>(null);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  const [originalOrders, setOriginalOrders] = useState<Order[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState<string>('All');
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-
-  const {
-    updateStatus,
-    isLoading: isStatusUpdating,
-    error: statusError,
-  } = useUpdateDriverStatus(driverId);
-  const {
-    data: orders,
-    isLoading: isOrdersLoading,
-    error: ordersError,
-    refetch,
-  } = useDriverBookings(driverId);
-  const {
-    data: driverProfile,
-    isLoading: isProfileLoading,
-    error: profileError,
-  } = useDriverProfile(driverId || '');
+  const device = useCameraDevice('back');
+  const camera = useRef<Camera>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [language, setLanguage] = useState('en'); // Default to English
+  const [imageData, setImageData] = useState('');
+  const [takePhotoclicked, setTakePhotoclicked] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [imageAnalysis, setImageAnalysis] = useState('');
 
   useEffect(() => {
-    const fetchDriverId = async () => {
-      const storedDriverId = await AsyncStorage.getItem('driverId');
-      if (storedDriverId) {
-        setDriverId(storedDriverId);
+    const fetchLanguage = async () => {
+      const lang = await AsyncStorage.getItem('userLanguage'); // Updated key to 'userLanguage'
+      if (lang) {
+        setLanguage(lang);
+      } else {
+        Alert.alert(
+          'Select Language',
+          'Please select your preferred language',
+          [
+            {text: 'English', onPress: () => setAppLanguage('en')},
+            {text: 'हिन्दी', onPress: () => setAppLanguage('hi')},
+          ],
+        );
       }
     };
-    fetchDriverId();
+
+    fetchLanguage();
   }, []);
 
   useEffect(() => {
-    if (orders) {
-      fetchAddresses();
-    }
-  }, [orders]);
+    checkPermission();
+  }, []);
 
-  useEffect(() => {
-    if (driverProfile) {
-      setIsActive(driverProfile.status); // Update the toggle switch based on the profile status
-    }
-  }, [driverProfile]);
-
-  useEffect(() => {
-    filterOrders(selectedFilter);
-  }, [orders, selectedFilter]);
-
-  const fetchAddresses = async () => {
-    try {
-      const updatedOrders = await Promise.all(
-        orders.map(async order => {
-          const startAddress = await getAddressFromCoordinates(
-            order.start.latitude,
-            order.start.longitude,
-          );
-          const endAddress = await getAddressFromCoordinates(
-            order.end.latitude,
-            order.end.longitude,
-          );
-          return {...order, startAddress, endAddress};
-        }),
-      );
-      setOriginalOrders(updatedOrders);
-      setFilteredOrders(updatedOrders);
-    } catch (error) {
-      console.error('Error fetching addresses:', error);
-    } finally {
-      setRefreshing(false);
-    }
+  const checkPermission = async () => {
+    const newCameraPermission = await Camera.requestCameraPermission();
+    console.log(newCameraPermission);
   };
 
-  const filterOrders = (filter: string) => {
-    let filtered: Order[];
-    const today = new Date();
-    switch (filter) {
-      case 'Today':
-        filtered = originalOrders.filter(order => {
-          const orderDate = new Date(order.date);
-          return orderDate.toDateString() === today.toDateString();
-        });
-        break;
-      case 'Upcoming':
-        filtered = originalOrders.filter(order => {
-          const orderDate = new Date(order.date);
-          return orderDate > today;
-        });
-        break;
-      case 'Previous':
-        filtered = originalOrders.filter(order => {
-          const orderDate = new Date(order.date);
-          return orderDate < today;
-        });
-        break;
-      default:
-        filtered = originalOrders;
-        break;
-    }
-    setFilteredOrders(filtered);
-  };
+  if (device == null) return <ActivityIndicator />;
 
-  const toggleSwitch = async () => {
-    const newStatus = !isActive;
-    setIsActive(newStatus);
-    if (driverId) {
+  const takePicture = async () => {
+    if (camera.current) {
       try {
-        await updateStatus(newStatus);
-      } catch (err) {
-        console.error('Error updating status:', err);
+        const photo = await camera.current.takePhoto();
+        const imageUri =
+          Platform.OS === 'android' ? `file://${photo.path}` : photo.path;
+
+        // Check if the file exists
+        const fileExists = await checkFileExists(imageUri);
+        if (!fileExists) {
+          throw new Error('Image file does not exist');
+        }
+
+        setImageData(imageUri);
+        setTakePhotoclicked(false);
+        setShowImageModal(true); // Show the image modal
+
+        // Create FormData to send the image to the backend
+        const formData = new FormData();
+        formData.append('file', {
+          uri: imageUri,
+          type: 'image/jpeg', // Adjust this if your image type is different
+          name: 'photo.jpg',
+        });
+
+        const response = await fetch(
+          'https://obscura-1.onrender.com/read-file',
+          {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          },
+        );
+
+        const responseText = await response.text();
+        console.log('Response status:', response.status);
+        console.log('Response text:', responseText);
+
+        if (!response.ok) {
+          throw new Error(`Image upload failed with status ${response.status}`);
+        }
+
+        // Parse the response text
+        const result = JSON.parse(responseText);
+        console.log('Upload response:', result);
+
+        // Set the analysis text to display in the modal
+        setImageAnalysis(result.generatedText);
+
+        // Convert the image analysis text to speech
+        Tts.speak(result.generatedText);
+        Tts.setDefaultRate(0.7); // Adjust the rate (1.0 is the default rate)
+
+        Alert.alert('Success', 'Image uploaded successfully');
+      } catch (error) {
+        console.error('Error taking picture or uploading:', error);
+        Alert.alert(
+          'Error',
+          `Failed to take or upload picture: ${error.message}`,
+        );
       }
-    } else {
-      console.error('Driver ID is not available');
     }
   };
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  }, [refetch]);
+  // Helper function to check if file exists
+  const checkFileExists = async (path: string): Promise<boolean> => {
+    try {
+      const response = await fetch(path);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
 
-  if (isOrdersLoading || isProfileLoading) {
-    return (
-      <View style={styles.activityIndicatorContainer}>
-        <ActivityIndicator size="large" color="#000" />
-      </View>
+  const setAppLanguage = async (lang: string) => {
+    setLanguage(lang);
+    await AsyncStorage.setItem('userLanguage', lang); // Updated key to 'userLanguage'
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 2000);
+  };
+
+  const handleBoxPress = (position: string) => {
+    Alert.alert(
+      translations[language]?.pressBox.replace('{position}', position) ?? '',
     );
-  }
+  };
 
   return (
-    <ScrollView
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#0000ff']}
-          tintColor="#0000ff"
-        />
-      }>
-      <View style={styles.welcomeContainer}>
-        <Text style={styles.welcomeText}>
-          Welcome {driverProfile?.name || 'Driver'}
-        </Text>
-      </View>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerText}>Set Status</Text>
-          <View style={styles.switchContainer}>
-            <Text style={styles.statusText}>
-              {isActive ? 'Active' : 'Inactive'}
-            </Text>
-            <Switch
-              trackColor={{false: '#FF6347', true: '#32CD32'}}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor="#E0E0E0"
-              onValueChange={toggleSwitch}
-              value={isActive}
-              disabled={isStatusUpdating}
+    <View style={{flex: 1}}>
+      {takePhotoclicked ? (
+        <View style={{flex: 1}}>
+          <Camera
+            ref={camera}
+            style={StyleSheet.absoluteFill}
+            device={device}
+            isActive={true}
+            photo
+          />
+          <TouchableOpacity
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              backgroundColor: '#FF0037',
+              position: 'absolute',
+              bottom: 50,
+              alignSelf: 'center',
+            }}
+            onPress={() => {
+              takePicture();
+            }}></TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.container}>
+          <View style={styles.backgroundImageContainer}>
+            <Image
+              source={require('../../assets/codifyformatter.png')}
+              style={styles.backgroundImage}
             />
+            <View style={styles.overlay} />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#0000ff']}
+                tintColor="#0000ff"
+              />
+            }>
+            <TouchableOpacity
+              style={styles.boxTopLeft}
+              onPress={() => handleBoxPress('Top Left')}>
+              <Image
+                source={require('../../assets/microphone-black-shape.png')}
+                style={[styles.icon, {tintColor: 'white'}]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.boxTopRight}
+              onPress={() => handleBoxPress('Top Right')}>
+              <Image
+                source={require('../../assets/chat.png')}
+                style={[styles.icon, {tintColor: 'white'}]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.boxBottomLeft}
+              onPress={() => handleBoxPress('Bottom Left')}>
+              <Image
+                source={require('../../assets/qr-code.png')}
+                style={[styles.icon, {tintColor: 'white'}]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.boxBottomRight}
+              onPress={() => handleBoxPress('Bottom Right')}>
+              <Image
+                source={require('../../assets/phone.png')}
+                style={[styles.icon, {tintColor: 'white'}]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.captureButtonContainer}
+              onPress={() => {
+                setTakePhotoclicked(true);
+              }}>
+              <View style={styles.captureButton}>
+                <Text style={styles.captureText}>
+                  {translations[language]?.openCamera ?? 'Open Camera'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Camera Modal */}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Image Modal */}
+      {showImageModal && (
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <ScrollView contentContainerStyle={styles.scrollViewContent}>
+              <Image source={{uri: imageData}} style={styles.previewImage} />
+              <Text style={styles.analysisText}>{imageAnalysis}</Text>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                Tts.stop(); // Stop any ongoing speech
+                setShowImageModal(false);
+                setImageData(''); // Clear the image data
+                setImageAnalysis(''); // Clear the image analysis
+              }}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        <FilterTabs
-          filters={[
-            {label: 'All'},
-            {label: 'Today'},
-            {label: 'Upcoming'},
-            {label: 'Previous'},
-          ]}
-          selectedFilter={selectedFilter}
-          onSelectFilter={setSelectedFilter}
-        />
-        <View style={styles.ordersContainer}>
-          {ordersError ? (
-            <Text>Error: {ordersError.message}</Text>
-          ) : isOrdersLoading ? (
-            <ActivityIndicator size="large" color="#000" />
-          ) : filteredOrders.length > 0 ? (
-            filteredOrders.map((order: Order) => (
-              <View key={order._id}>
-                <OrderCard
-                  from={order.startAddress}
-                  to={order.endAddress}
-                  date={order.date}
-                  time={order.time}
-                  userName={order.user.name}
-                  phoneNo={order.user.phoneNo}
-                  type={order.type}
-                  desc={order.desc}
-                />
-              </View>
-            ))
-          ) : (
-            <Text style={styles.noOrdersText}>No orders found.</Text>
-          )}
-        </View>
-      </View>
-    </ScrollView>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  activityIndicatorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  welcomeContainer: {
-    height: 100,
-    backgroundColor: '#000',
-    borderBottomRightRadius: 25,
-    borderBottomLeftRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  welcomeText: {
-    fontFamily: 'Poppins-Medium',
-    fontSize: 20,
-    color: '#fff',
-  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-    padding: 20,
+    backgroundColor: '#fff',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    shadowColor: '#000000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    marginBottom: 20,
-  },
-  headerText: {
-    fontSize: 26,
-    fontWeight: '700',
-    fontFamily: 'Poppins-ExtraBold',
-    color: '#212121',
-  },
-  switchContainer: {
-    flexDirection: 'row',
+  backgroundImageContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  statusText: {
-    fontSize: 18,
-    color: '#212121',
-    marginRight: 12,
+  backgroundImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  ordersContainer: {
-    flex: 1,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  noOrdersText: {
-    textAlign: 'center',
+  icon: {
+    width: 30,
+    height: 30,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  boxTopLeft: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: '#0047AB',
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomRightRadius: 10,
+  },
+  boxTopRight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#0047AB',
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomLeftRadius: 10,
+  },
+  boxBottomLeft: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    backgroundColor: '#0047AB',
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopRightRadius: 10,
+  },
+  boxBottomRight: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#0047AB',
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 10,
+  },
+//   captureButtonContainer: {
+//     marginTop: 20,
+//     padding: 10,
+//     backgroundColor: '#008080',
+//     borderRadius: 20,
+//     shadowColor: '#000',
+//     shadowOffset: {width: 0, height: 2},
+//     shadowOpacity: 0.3,
+//     shadowRadius: 4,
+//   },
+//   captureButton: {
+//     alignItems: 'center',
+//   },
+//   captureText: {
+//     color: 'white',
+//     fontSize: 18,
+//     fontWeight: 'bold',
+//   },
+captureButtonContainer: {
     marginTop: 20,
+    padding: 15,
+    backgroundColor: '#008080', // Keep the base color
+    borderRadius: 30, // Make it more rounded
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5, // Elevation for Android
+    alignSelf: 'center', // Center the button horizontally
   },
-  allotDriverButton: {
-    marginTop: 10,
-    backgroundColor: '#4CAF50',
-    padding: 10,
-    borderRadius: 5,
+  captureButton: {
     alignItems: 'center',
   },
-  allotDriverButtonText: {
-    color: '#fff',
+  captureText: {
+    color: '#fff', // Make sure the text is white for contrast
+    fontSize: 20, // Increase font size for better readability
+    fontWeight: '700', // Use a bolder font weight
+    textShadowColor: '#000', // Add a slight shadow for text readability
+    textShadowOffset: {width: 1, height: 1},
+    textShadowRadius: 2,
+  },
+  modalContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%', // Limit the maximum height to prevent it from being too tall
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+  },
+  scrollViewContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewImage: {
+    width: '100%',
+    height: 300,
+    resizeMode: 'contain',
+    marginBottom: 10, // Space between image and text
+  },
+  analysisText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20, // Space between text and close button
+  },
+  closeButton: {
+    padding: 10,
+    backgroundColor: '#FF0037',
+    borderRadius: 5,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontSize: 16,
   },
 });
 
