@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
   Modal,
+  Linking,
 } from 'react-native';
 import {Camera, useCameraDevice} from 'react-native-vision-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -151,6 +152,48 @@ const Home: React.FC = () => {
     );
   };
 
+  const openContacts = () => {
+    if (Platform.OS === 'ios') {
+      // For iOS, open contacts through the 'mailto' scheme (which opens the Contacts app)
+      Linking.openURL('mailto:');
+    } else {
+      // For Android, open contacts using the content URI, which opens the default contacts app
+      Linking.openURL('content://contacts/people/');
+    }
+  };
+
+  const openMessagingApp = () => {
+    const phoneNumber = '+916230757220'; // Optionally, specify a phone number
+
+    if (Platform.OS === 'ios') {
+      // For iOS, use the 'sms:' scheme
+      Linking.openURL(`sms:${phoneNumber}`);
+    } else {
+      // For Android, use the same 'sms:' scheme to open the default messaging app
+      Linking.openURL(`sms:${phoneNumber}`);
+    }
+  };
+
+  //   const openWhatsApp = () => {
+  //     const phoneNumber = '+1234567890'; // Specify a phone number (with country code)
+
+  //     const url = `whatsapp://send?phone=${phoneNumber}`;
+
+  //     Linking.canOpenURL(url)
+  //       .then((supported) => {
+  //         if (supported) {
+  //           Linking.openURL(url);
+  //         } else {
+  //           console.log('WhatsApp is not installed on this device.');
+  //           alert('WhatsApp is not installed on this device.');
+  //         }
+  //       })
+  //       .catch((err) => {
+  //         console.error('Error opening WhatsApp:', err);
+  //         alert('An error occurred while trying to open WhatsApp.');
+  //       });
+  //   };
+
   return (
     <View style={{flex: 1}}>
       {takePhotoclicked ? (
@@ -207,7 +250,7 @@ const Home: React.FC = () => {
 
             <TouchableOpacity
               style={styles.boxTopRight}
-              onPress={() => handleBoxPress('Top Right')}>
+              onPress={openMessagingApp}>
               <Image
                 source={require('../../assets/chat.png')}
                 style={[styles.icon, {tintColor: 'white'}]}
@@ -225,7 +268,7 @@ const Home: React.FC = () => {
 
             <TouchableOpacity
               style={styles.boxBottomRight}
-              onPress={() => handleBoxPress('Bottom Right')}>
+              onPress={openContacts}>
               <Image
                 source={require('../../assets/phone.png')}
                 style={[styles.icon, {tintColor: 'white'}]}
@@ -346,25 +389,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopLeftRadius: 10,
   },
-//   captureButtonContainer: {
-//     marginTop: 20,
-//     padding: 10,
-//     backgroundColor: '#008080',
-//     borderRadius: 20,
-//     shadowColor: '#000',
-//     shadowOffset: {width: 0, height: 2},
-//     shadowOpacity: 0.3,
-//     shadowRadius: 4,
-//   },
-//   captureButton: {
-//     alignItems: 'center',
-//   },
-//   captureText: {
-//     color: 'white',
-//     fontSize: 18,
-//     fontWeight: 'bold',
-//   },
-captureButtonContainer: {
+  //   captureButtonContainer: {
+  //     marginTop: 20,
+  //     padding: 10,
+  //     backgroundColor: '#008080',
+  //     borderRadius: 20,
+  //     shadowColor: '#000',
+  //     shadowOffset: {width: 0, height: 2},
+  //     shadowOpacity: 0.3,
+  //     shadowRadius: 4,
+  //   },
+  //   captureButton: {
+  //     alignItems: 'center',
+  //   },
+  //   captureText: {
+  //     color: 'white',
+  //     fontSize: 18,
+  //     fontWeight: 'bold',
+  //   },
+  captureButtonContainer: {
     marginTop: 20,
     padding: 15,
     backgroundColor: '#008080', // Keep the base color
