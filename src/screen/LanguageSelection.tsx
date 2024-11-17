@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React from 'react';
+import React, {useEffect} from 'react';
+import Tts from 'react-native-tts';
 import {
   StyleSheet,
   View,
@@ -22,6 +23,16 @@ const LanguageSelection: React.FC<{navigation: any}> = ({navigation}) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Speak when the component mounts
+    Tts.speak('Select Language between Hindi and English', {
+      androidParams: {
+        KEY_PARAM_VOLUME: 1.0, // Set volume to maximum
+      },
+      rate: 0.5,
+    });
+  }, []);
 
   return (
     <View style={styles.container}>
